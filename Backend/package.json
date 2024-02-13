@@ -9,6 +9,8 @@
   "author": "Mayank Mishra",
   "license": "ISC",
   "dependencies": {
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "mongoose": "^8.1.2",
+    "zod": "^3.22.4"
   }
 }
