@@ -1,0 +1,477 @@
+// AstroTracker — data model
+//
+// Design rules that this schema follows:
+//  1. History is sacred. Daily records (tasks, habit logs, notes, reflections,
+//     scores, failures) must survive edits or deletions of the goals and
+//     milestones they were once linked to. Those links are nullable and use
+//     onDelete: SetNull; the daily record keeps its own copy of what happened.
+//  2. Definitions are archivable, not deletable, once they carry history.
+//     Habits and failure reasons use onDelete: Restrict for that reason.
+//  3. A "day" is a calendar date in the user's timezone, stored as a DATE
+//     column. No timestamps for day-scoped rows: no timezone drift.
+//  4. Anything a person wrote stays editable forever. Nothing is immutable.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum GoalStatus {
+  ACTIVE
+  PAUSED
+  ACHIEVED
+  ABANDONED
+}
+
+enum CycleStatus {
+  PLANNED
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
+
+enum MilestoneStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+// Where a milestone came from. TEMPLATE is today's deterministic generator;
+// AI is reserved for a future generation layer. Kept on the row so a review
+// can honestly say "you accepted 4 of 5 suggested milestones".
+enum MilestoneSource {
+  MANUAL
+  TEMPLATE
+  AI
+}
+
+enum TaskStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+}
+
+enum HabitStatus {
+  DONE
+  NOT_DONE
+}
+
+enum FailureSource {
+  TASK
+  HABIT
+  GENERAL
+}
+
+enum ReviewType {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  CYCLE90
+}
+
+// ---------------------------------------------------------------------------
+// Account
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  // All day boundaries are computed in this timezone.
+  timezone     String   @default("Asia/Kolkata")
+  // Bumping this invalidates every issued session cookie.
+  sessionVersion Int    @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  identities     Identity[]
+  categories     GoalCategory[]
+  goals          Goal[]
+  cycles         Cycle[]
+  milestones     Milestone[]
+  habits         Habit[]
+  tasks          Task[]
+  dailyEntries   DailyEntry[]
+  failureReasons FailureReason[]
+  failureEvents  FailureEvent[]
+  reviews        PeriodicReview[]
+  snapshots      ProgressSnapshot[]
+}
+
+// ---------------------------------------------------------------------------
+// Level 1 — Identity / North Star
+// ---------------------------------------------------------------------------
+
+model Identity {
+  id          String   @id @default(cuid())
+  userId      String
+  statement   String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  revisions IdentityRevision[]
+
+  @@index([userId, isActive])
+}
+
+// Every edit of the north star keeps the previous wording, so a 90-day review
+// can show "who you said you were becoming" at the start of the cycle.
+model IdentityRevision {
+  id          String   @id @default(cuid())
+  identityId  String
+  statement   String
+  description String?
+  replacedAt  DateTime @default(now())
+
+  identity Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  @@index([identityId, replacedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Level 2 — Long-term goals
+// ---------------------------------------------------------------------------
+
+model GoalCategory {
+  id        String @id @default(cuid())
+  userId    String
+  name      String
+  color     String @default("#8b8f98")
+  sortOrder Int    @default(0)
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goals Goal[]
+
+  @@unique([userId, name])
+}
+
+model Goal {
+  id           String     @id @default(cuid())
+  userId       String
+  categoryId   String?
+  title        String
+  description  String?
+  whyItMatters String?
+  targetDate   DateTime?  @db.Date
+  priority     Priority   @default(MEDIUM)
+  status       GoalStatus @default(ACTIVE)
+  sortOrder    Int        @default(0)
+  archivedAt   DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category   GoalCategory?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  cycles     Cycle[]
+  milestones Milestone[]
+  habits     Habit[]
+  tasks      Task[]
+  snapshots  ProgressSnapshot[]
+
+  @@index([userId, status])
+}
+
+// ---------------------------------------------------------------------------
+// Level 3 — 90-day cycles
+// ---------------------------------------------------------------------------
+
+model Cycle {
+  id              String      @id @default(cuid())
+  userId          String
+  goalId          String?
+  name            String
+  objective       String?
+  successCriteria String?
+  startDate       DateTime    @db.Date
+  endDate         DateTime    @db.Date
+  status          CycleStatus @default(ACTIVE)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goal       Goal?              @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  milestones Milestone[]
+  reviews    PeriodicReview[]
+  snapshots  ProgressSnapshot[]
+
+  @@index([userId, status])
+  @@index([userId, startDate])
+}
+
+// ---------------------------------------------------------------------------
+// Milestones
+// ---------------------------------------------------------------------------
+
+model Milestone {
+  id          String          @id @default(cuid())
+  userId      String
+  goalId      String?
+  cycleId     String?
+  title       String
+  description String?
+  targetDate  DateTime?       @db.Date
+  status      MilestoneStatus @default(PENDING)
+  completedAt DateTime?
+  sortOrder   Int             @default(0)
+  source      MilestoneSource @default(MANUAL)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goal   Goal?  @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  cycle  Cycle? @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  habits Habit[]
+  tasks  Task[]
+
+  @@index([userId, status])
+  @@index([goalId, sortOrder])
+}
+
+// ---------------------------------------------------------------------------
+// Habits
+// ---------------------------------------------------------------------------
+
+model Habit {
+  id          String    @id @default(cuid())
+  userId      String
+  goalId      String?
+  milestoneId String?
+  name        String
+  description String?
+  // Bitmask of expected days: bit 0 = Sunday ... bit 6 = Saturday. 127 = daily.
+  daysOfWeek  Int       @default(127)
+  isActive    Boolean   @default(true)
+  sortOrder   Int       @default(0)
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goal      Goal?      @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  milestone Milestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  logs      HabitLog[]
+
+  @@index([userId, isActive])
+}
+
+model HabitLog {
+  id        String      @id @default(cuid())
+  habitId   String
+  date      DateTime    @db.Date
+  status    HabitStatus
+  note      String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  // Restrict: a habit with recorded history is archived, never deleted.
+  habit         Habit          @relation(fields: [habitId], references: [id], onDelete: Restrict)
+  failureEvents FailureEvent[]
+
+  @@unique([habitId, date])
+  @@index([date])
+}
+
+// ---------------------------------------------------------------------------
+// Tasks (day-scoped actions)
+// ---------------------------------------------------------------------------
+
+model Task {
+  id               String     @id @default(cuid())
+  userId           String
+  date             DateTime   @db.Date
+  title            String
+  description      String?
+  goalId           String?
+  milestoneId      String?
+  estimatedMinutes Int?
+  priority         Priority   @default(MEDIUM)
+  status           TaskStatus @default(NOT_STARTED)
+  completedAt      DateTime?
+  sortOrder        Int        @default(0)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goal          Goal?          @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  milestone     Milestone?     @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  failureEvents FailureEvent[]
+
+  @@index([userId, date])
+  @@index([userId, status])
+}
+
+// ---------------------------------------------------------------------------
+// The day itself — focus, notes, reflection, self-assessment
+// ---------------------------------------------------------------------------
+
+model DailyEntry {
+  id           String   @id @default(cuid())
+  userId       String
+  date         DateTime @db.Date
+  // "Today's Focus": the single primary objective.
+  focus        String?
+  // "One thing I will deliberately NOT do."
+  avoid        String?
+  morningNote  String?
+  dayNote      String?
+  eveningNote  String?
+  // The DAY 1 — INTERNAL PATCHES worksheet. Stored as JSON against a versioned
+  // template defined in src/lib/domain/patch-template.ts so the worksheet can
+  // evolve without a migration, while old days keep the version they were
+  // written against.
+  patches        Json?
+  patchesVersion String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reflection DailyReflection?
+  score      DailyScore?
+
+  @@unique([userId, date])
+  @@index([userId, date])
+}
+
+model DailyReflection {
+  id             String   @id @default(cuid())
+  dailyEntryId   String   @unique
+  wentWell       String?
+  whereFailed    String?
+  why            String?
+  learned        String?
+  changeTomorrow String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  dailyEntry DailyEntry @relation(fields: [dailyEntryId], references: [id], onDelete: Cascade)
+}
+
+model DailyScore {
+  id               String   @id @default(cuid())
+  dailyEntryId     String   @unique
+  // Self-assessment, 1-5. Null means "not rated", never zero.
+  focus            Int?
+  discipline       Int?
+  emotionalControl Int?
+  execution        Int?
+  energy           Int?
+  // Derived execution score, 0-100, or null when there is nothing to score.
+  executionScore   Int?
+  // The exact inputs and weights used, so the number can always be explained.
+  breakdown        Json?
+  computedAt       DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  dailyEntry DailyEntry @relation(fields: [dailyEntryId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Failure as data
+// ---------------------------------------------------------------------------
+
+model FailureReason {
+  id        String  @id @default(cuid())
+  userId    String
+  code      String
+  label     String
+  // Seeded reasons cannot be deleted, only deactivated.
+  isSystem  Boolean @default(false)
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events FailureEvent[]
+
+  @@unique([userId, code])
+}
+
+// One table for every recorded miss, whatever it was attached to, so that
+// pattern queries ("why do you miss things?") are a single group-by.
+model FailureEvent {
+  id         String        @id @default(cuid())
+  userId     String
+  date       DateTime      @db.Date
+  source     FailureSource
+  taskId     String?
+  habitLogId String?
+  reasonId   String?
+  note       String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task     Task?          @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  habitLog HabitLog?      @relation(fields: [habitLogId], references: [id], onDelete: SetNull)
+  reason   FailureReason? @relation(fields: [reasonId], references: [id], onDelete: Restrict)
+
+  @@index([userId, date])
+  @@index([userId, reasonId])
+}
+
+// ---------------------------------------------------------------------------
+// Periodic reviews and progress history
+// ---------------------------------------------------------------------------
+
+model PeriodicReview {
+  id          String     @id @default(cuid())
+  userId      String
+  type        ReviewType
+  periodStart DateTime   @db.Date
+  periodEnd   DateTime   @db.Date
+  cycleId     String?
+  // Computed statistics captured when the review was generated, so a review
+  // read a year later still shows the numbers it was written against.
+  metrics     Json?
+  // Everything below is the user's own words and always editable.
+  observations   String?
+  patterns       String?
+  nextPriorities String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cycle Cycle? @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, type, periodStart])
+  @@index([userId, type])
+}
+
+// A daily snapshot of computed progress, so trends are read from history
+// instead of being recomputed (and silently rewritten) after the fact.
+model ProgressSnapshot {
+  id         String   @id @default(cuid())
+  userId     String
+  date       DateTime @db.Date
+  goalId     String?
+  cycleId    String?
+  progress   Float
+  components Json?
+  createdAt  DateTime @default(now())
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goal  Goal?  @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  cycle Cycle? @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date, goalId])
+  @@index([userId, date])
+}

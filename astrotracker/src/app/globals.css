@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+/*
+  AstroTracker visual language.
+
+  One dark surface, one restrained accent, no gradients, no decoration.
+  The product is a console you look at every day: contrast carries meaning
+  (what is due, what is missed), colour is never used to celebrate.
+*/
+@theme {
+  --color-canvas: #0b0c0e;
+  --color-surface: #121417;
+  --color-raised: #171a1f;
+  --color-line: #23272d;
+  --color-line-soft: #1a1e23;
+
+  --color-ink: #e7e9ec;
+  --color-ink-muted: #9aa1aa;
+  --color-ink-faint: #6b727b;
+
+  --color-accent: #c8a45c;
+  --color-accent-dim: #8a7038;
+  --color-positive: #5c9d78;
+  --color-negative: #c0705f;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background-color: var(--color-accent-dim);
+  color: #fff;
+}
+
+/* Focus ring: visible, quiet, consistent. */
+:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.label-caps {
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+}
