@@ -1,10 +1,10 @@
 {
-  "name": "plugkit",
+  "name": "plugbase",
   "version": "0.1.0",
-  "description": "Pluggable project tools you can run from the CLI, from Node, or inside VS Code / Cursor.",
+  "description": "A small plugin engine for project tools: write a tool once, run it from the CLI, from Node, or inside VS Code / Cursor.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "bin": { "plugkit": "dist/cli.js" },
+  "bin": { "plugbase": "dist/cli.js" },
   "files": ["dist"],
   "license": "MIT",
   "engines": { "node": ">=18" },

@@ -1,12 +1,19 @@
 import * as path from "path";
 import { loadConfig } from "./config";
+import { createSandboxedWriter } from "./fs-sandbox";
+import { nonInteractiveInput } from "./input";
+import { checkContractVersion, resolveOptions, validateOptions } from "./options";
 import { builtinTools } from "./tools";
-import { Tool, ToolResult } from "./types";
+import { CONTRACT_VERSION, Tool, ToolResult, UserInput } from "./types";
 
-export class Plugkit {
+export class Plugbase {
   private tools = new Map<string, Tool>();
 
-  constructor(readonly cwd: string, private log: (m: string) => void = () => {}) {
+  constructor(
+    readonly cwd: string,
+    private log: (m: string) => void = () => {},
+    private input: UserInput = nonInteractiveInput,
+  ) {
     for (const t of builtinTools) this.register(t);
   }
 
@@ -14,10 +21,11 @@ export class Plugkit {
     if (!tool || typeof tool.id !== "string" || typeof tool.run !== "function") {
       throw new Error("A tool needs an `id` string and a `run` function");
     }
+    checkContractVersion(tool, CONTRACT_VERSION, this.log);
     this.tools.set(tool.id, tool);
   }
 
-  /** Load plugins listed in the project's plugkit.config.json, resolved from the project root. */
+  /** Loads plugins listed in the project's plugbase.config.json, resolved from the project root. */
   loadProjectPlugins(): string[] {
     const { plugins = [] } = loadConfig(this.cwd);
     const loaded: string[] = [];
@@ -37,16 +45,27 @@ export class Plugkit {
     return [...this.tools.values()];
   }
 
+  get(id: string): Tool | undefined {
+    return this.tools.get(id);
+  }
+
   async run(id: string): Promise<ToolResult> {
     const tool = this.tools.get(id);
     if (!tool) throw new Error(`Unknown tool "${id}". Available: ${[...this.tools.keys()].join(", ")}`);
-    const options = loadConfig(this.cwd).options?.[id] ?? {};
-    return tool.run({ cwd: path.resolve(this.cwd), options, log: this.log });
+
+    const cwd = path.resolve(this.cwd);
+    const options = resolveOptions(tool, loadConfig(this.cwd).options?.[id] ?? {});
+    validateOptions(tool, options);
+
+    const { writeFile, written } = createSandboxedWriter(cwd);
+    const result = await tool.run({ cwd, options, log: this.log, input: this.input, writeFile });
+    const filesWritten = [...new Set([...(result.filesWritten ?? []), ...written])];
+    return filesWritten.length ? { ...result, filesWritten } : result;
   }
 }
 
-export function createPlugkit(cwd = process.cwd(), log?: (m: string) => void): Plugkit {
-  const kit = new Plugkit(cwd, log);
+export function createPlugbase(cwd = process.cwd(), log?: (m: string) => void, input?: UserInput): Plugbase {
+  const kit = new Plugbase(cwd, log, input);
   kit.loadProjectPlugins();
   return kit;
 }

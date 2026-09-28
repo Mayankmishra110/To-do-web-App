@@ -1,28 +1,28 @@
 {
-  "name": "plugkit-vscode",
-  "displayName": "Plugkit",
-  "description": "Run Plugkit project tools from VS Code and Cursor.",
+  "name": "plugbase-vscode",
+  "displayName": "Plugbase",
+  "description": "Run Plugbase project tools from VS Code and Cursor.",
   "version": "0.1.0",
   "publisher": "mayankmishra110",
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/mayankmishra110/plugkit" },
+  "repository": { "type": "git", "url": "https://github.com/mayankmishra110/plugbase" },
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Other"],
   "main": "./dist/extension.js",
-  "activationEvents": ["workspaceContains:plugkit.config.json"],
+  "activationEvents": ["workspaceContains:plugbase.config.json"],
   "contributes": {
     "commands": [
-      { "command": "plugkit.runTool", "title": "Run Tool…", "category": "Plugkit" },
-      { "command": "plugkit.init", "title": "Create Config", "category": "Plugkit" },
-      { "command": "plugkit.clear", "title": "Clear Results", "category": "Plugkit" }
+      { "command": "plugbase.runTool", "title": "Run Tool…", "category": "Plugbase" },
+      { "command": "plugbase.init", "title": "Create Config", "category": "Plugbase" },
+      { "command": "plugbase.clear", "title": "Clear Results", "category": "Plugbase" }
     ]
   },
   "scripts": {
     "build": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node18 --external:vscode --outfile=dist/extension.js",
-    "package": "vsce package --no-dependencies --out plugkit.vsix"
+    "package": "vsce package --no-dependencies --out plugbase.vsix"
   },
   "devDependencies": {
-    "plugkit": "0.1.0",
+    "plugbase": "0.1.0",
     "@types/vscode": "~1.85.0",
     "@types/node": "^20.0.0",
     "@vscode/vsce": "^3.0.0",

@@ -1,3 +1,4 @@
 export * from "./types";
-export { Plugkit, createPlugkit } from "./registry";
+export { Plugbase, createPlugbase } from "./registry";
 export { loadConfig, writeDefaultConfig, CONFIG_FILE } from "./config";
+export { nonInteractiveInput, createReadlineInput } from "./input";
