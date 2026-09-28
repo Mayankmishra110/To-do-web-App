@@ -1,0 +1,10 @@
+{
+  "name": "plugkit-monorepo",
+  "private": true,
+  "workspaces": ["packages/core", "packages/vscode"],
+  "scripts": {
+    "build": "npm run build -w plugkit && npm run build -w plugkit-vscode",
+    "test": "npm run build -w plugkit && npm test -w plugkit",
+    "package:vsix": "npm run build && npm run package -w plugkit-vscode"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "plugkit-vscode",
+  "displayName": "Plugkit",
+  "description": "Run Plugkit project tools from VS Code and Cursor.",
+  "version": "0.1.0",
+  "publisher": "mayankmishra110",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/mayankmishra110/plugkit" },
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other"],
+  "main": "./dist/extension.js",
+  "activationEvents": ["workspaceContains:plugkit.config.json"],
+  "contributes": {
+    "commands": [
+      { "command": "plugkit.runTool", "title": "Run Tool…", "category": "Plugkit" },
+      { "command": "plugkit.init", "title": "Create Config", "category": "Plugkit" },
+      { "command": "plugkit.clear", "title": "Clear Results", "category": "Plugkit" }
+    ]
+  },
+  "scripts": {
+    "build": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node18 --external:vscode --outfile=dist/extension.js",
+    "package": "vsce package --no-dependencies --out plugkit.vsix"
+  },
+  "devDependencies": {
+    "plugkit": "0.1.0",
+    "@types/vscode": "~1.85.0",
+    "@types/node": "^20.0.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0"
+  }
+}
